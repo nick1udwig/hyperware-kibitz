@@ -1,0 +1,15 @@
+[
+    {
+        "process_name": "kibitz-test",
+        "process_wasm_path": "/kibitz-test.wasm",
+        "on_exit": "Restart",
+        "request_networking": false,
+        "request_capabilities": [
+            "kibitz:kibitz:template.os"
+        ],
+        "grant_capabilities": [
+            "kibitz:kibitz:template.os"
+        ],
+        "public": true
+    }
+]

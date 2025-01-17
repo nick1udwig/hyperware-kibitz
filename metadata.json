@@ -1,0 +1,18 @@
+{
+    "name": "kibitz",
+    "description": "Chat with LLMs and use tools",
+    "image": "https://raw.githubusercontent.com/nick1udwig/kibitz/137f2f6ddd61bc3cf3c01a7bed1d7eb2c0b6ac36/public/favicon.svg",
+    "properties": {
+        "package_name": "kibitz",
+        "current_version": "0.1.0",
+        "publisher": "nick.kino",
+        "mirrors": ["nickludwig.os", "nick1udwig.os", "diligence.os"],
+        "code_hashes": {
+            "0.1.0": ""
+        },
+        "wit_version": 1,
+        "dependencies": []
+    },
+    "external_url": "https://github.com/nick1udwig/kibitz",
+    "animation_url": ""
+}
