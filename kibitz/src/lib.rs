@@ -1,4 +1,4 @@
-use kinode_process_lib::logging::{error, info, init_logging, Level};
+use kinode_process_lib::logging::{info, init_logging, Level};
 use kinode_process_lib::{
     await_message, call_init,
     homepage::add_to_homepage,
@@ -13,6 +13,8 @@ wit_bindgen::generate!({
     additional_derives: [serde::Deserialize, serde::Serialize, process_macros::SerdeJsonInto],
 });
 
+const ICON: &str = include_str!("icon");
+
 call_init!(init);
 fn init(our: Address) {
     init_logging(&our, Level::DEBUG, Level::INFO, None, None).unwrap();
@@ -20,14 +22,13 @@ fn init(our: Address) {
 
     let mut server = HttpServer::new(5);
 
-    // Bind UI files to routes with index.html at "/"; API to /messages; WS to "/"
     server
-        .serve_ui(&our, "ui", vec!["/"], HttpBindingConfig::default())
+        .serve_ui(&our, "kibitz-ui", vec!["/"], HttpBindingConfig::default())
         .expect("failed to serve UI");
 
-    add_to_homepage("Kibitz", None, Some("index.html"), None);
+    add_to_homepage("Kibitz", Some(ICON), Some(""), None);
 
     loop {
-        await_message();
+        let _ = await_message();
     }
 }

@@ -8,7 +8,7 @@
         "publisher": "nick.kino",
         "mirrors": ["nickludwig.os", "nick1udwig.os", "diligence.os"],
         "code_hashes": {
-            "0.1.0": ""
+            "0.1.0": "5ec050dc9dcd96dc66a0f6aab01aed7e1e2e6ab9237516b4097aadcf327569d8"
         },
         "wit_version": 1,
         "dependencies": []

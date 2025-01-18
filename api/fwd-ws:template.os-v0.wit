@@ -1,0 +1,44 @@
+interface fwd-ws {
+    /// Connection represents our current connection status
+    enum connection-type {
+        none,
+        to-ws-server,
+        to-ws-client,
+    }
+
+    /// Current state of the process
+    record state {
+        partner: option<string>,
+        connection: connection-type,
+        ws-url: option<string>,
+    }
+
+    variant request {
+        /// Set the partner node to forward messages to/from
+        set-partner(option<string>),
+        /// Connect as a WebSocket client to URL
+        connect-to-server(string),
+        /// Accept WebSocket clients on given endpoint
+        accept-clients(string),
+        /// Disconnect any current WebSocket connection
+        disconnect,
+        /// Get current state
+        get-state,
+        /// Forward a message between partner and WebSocket
+        forward(string),
+    }
+
+    variant response {
+        /// Response to state change requests
+        ok,
+        /// Response to state request
+        get-state(state),
+        /// Error response
+        err(string),
+    }
+}
+
+world fwd-ws-template-dot-os-v0 {
+    import fwd-ws;
+    include process-v1;
+}
