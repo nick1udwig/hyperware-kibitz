@@ -8,7 +8,7 @@ use kinode_process_lib::{
     await_message, call_init, get_blob, get_state,
     homepage::add_to_homepage,
     http::{
-        client::{open_ws_connection, send_ws_client_push},
+        client::{close_ws_connection, open_ws_connection, send_ws_client_push},
         server::{
             send_response, HttpBindingConfig, HttpServer, HttpServerAction, HttpServerRequest,
             StatusCode, WsBindingConfig, WsMessageType,
@@ -33,6 +33,10 @@ struct ProcessState {
     connection: ConnectionType,
     ws_url: Option<String>,
     ws_channel: Option<u32>,
+    #[serde(skip)]
+    pending_message: Option<String>,
+    #[serde(skip)]
+    pending_partner_message: Option<String>,
 }
 
 impl Default for ProcessState {
@@ -42,17 +46,44 @@ impl Default for ProcessState {
             connection: ConnectionType::None,
             ws_url: None,
             ws_channel: None,
+            pending_message: None,
+            pending_partner_message: None,
         }
     }
 }
 
 impl ProcessState {
     fn restore() -> anyhow::Result<Self> {
-        Ok(if let Some(state) = get_state() {
-            serde_json::from_slice(&state)?
+        let restored = if let Some(state) = get_state() {
+            let state: Self = serde_json::from_slice(&state)?;
+
+            // If we have a WebSocket server connection and a channel
+            if matches!(state.connection, ConnectionType::ToWsServer) {
+                let Some(ws_channel) = state.ws_channel else {
+                    return Ok(state);
+                };
+                let Some(url) = &state.ws_url else {
+                    error!("error restoring: have WS channel set but no WS url");
+                    return Ok(state);
+                };
+                // First disconnect
+                if let Err(e) = close_ws_connection(ws_channel) {
+                    info!("error restoring ({e}): couldn't close old WS; trying to proceed");
+                };
+
+                // Then reconnect if we have a URL
+                let channel_id = rand::random();
+                if let Ok(_) = open_ws_connection(url.clone(), None, channel_id) {
+                    let mut state = state;
+                    state.ws_channel = Some(channel_id);
+                    return Ok(state);
+                }
+            }
+            state
         } else {
             Self::default()
-        })
+        };
+        Ok(restored)
     }
 
     fn save(&self) -> anyhow::Result<()> {
@@ -100,6 +131,23 @@ fn handle_http_server_request(
             state.ws_channel = Some(channel_id);
             state.save()?;
             server.handle_websocket_open(path, channel_id);
+
+            // Send any pending partner messages
+            if let Some(ref message) = state.pending_partner_message {
+                Request::new()
+                    .target(&make_http_server_address(our))
+                    .body(serde_json::to_vec(&HttpServerAction::WebSocketPush {
+                        channel_id,
+                        message_type: WsMessageType::Text,
+                    })?)
+                    .blob(LazyLoadBlob {
+                        mime: Some("text/plain".to_string()),
+                        bytes: message.clone().into_bytes(),
+                    })
+                    .send()?;
+                state.pending_partner_message = None;
+            }
+            state.save()?;
         }
 
         HttpServerRequest::WebSocketClose(channel_id) => {
@@ -114,16 +162,22 @@ fn handle_http_server_request(
         }
 
         HttpServerRequest::WebSocketPush { channel_id, .. } => {
+            // request from client (kibitz fe):
+            //  forward to our partner over the Kinet
             if state.ws_channel != Some(channel_id) {
                 return Ok(());
             }
             if let Some(blob) = get_blob() {
-                // Only forward if we have a partner
+                let msg = String::from_utf8(blob.bytes)?;
                 if let Some(ref partner) = state.partner {
                     Request::new()
-                        .target((partner, "fwd-ws", "fwd-ws", "nick.kino"))
-                        .body(FwdWsRequest::Forward(String::from_utf8(blob.bytes)?))
+                        .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                        .body(FwdWsRequest::Forward(msg))
                         .send()?;
+                } else {
+                    // Store message if no partner set
+                    state.pending_message = Some(msg);
+                    state.save()?;
                 }
             }
         }
@@ -172,6 +226,18 @@ fn handle_request_message(
     match request {
         FwdWsRequest::SetPartner(partner) => {
             state.partner = partner;
+            // If partner is being set, send any pending messages
+            if state.partner.is_some() {
+                if let Some(ref msg) = state.pending_message {
+                    if let Some(ref partner) = state.partner {
+                        Request::new()
+                            .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                            .body(FwdWsRequest::Forward(msg.clone()))
+                            .send()?;
+                        state.pending_message = None;
+                    }
+                }
+            }
             state.save()?;
             if should_respond {
                 Response::new().body(FwdWsResponse::Ok).send()?;
@@ -240,21 +306,28 @@ fn handle_request_message(
         }
 
         FwdWsRequest::Forward(message) => {
-            // Only forward if from partner
+            if message.is_empty() {
+                return Ok(());
+            }
+            // Only handle if from partner
             if state.partner.as_ref().map_or(false, |p| p == &source.node) {
                 if let Some(channel_id) = state.ws_channel {
                     match state.connection {
                         ConnectionType::ToWsServer => {
+                            // we're connected to a WS server: the ws-mcp
+                            //  send the message to the ws-mcp to be fulfilled
                             send_ws_client_push(
                                 channel_id,
                                 WsMessageType::Text,
                                 LazyLoadBlob {
                                     mime: Some("text/plain".to_string()),
-                                    bytes: message.into_bytes(),
+                                    bytes: message.clone().into_bytes(),
                                 },
                             );
                         }
                         ConnectionType::ToWsClient => {
+                            // we're connected to kibitz:
+                            //  send the message to kibitz
                             let http_server = make_http_server_address(our);
                             Request::new()
                                 .target(&http_server)
@@ -264,19 +337,20 @@ fn handle_request_message(
                                 })?)
                                 .blob(LazyLoadBlob {
                                     mime: Some("text/plain".to_string()),
-                                    bytes: message.into_bytes(),
+                                    bytes: message.clone().into_bytes(),
                                 })
                                 .send()?;
                         }
                         ConnectionType::None => {
-                            if should_respond {
-                                Response::new()
-                                    .body(FwdWsResponse::Err("Not connected".to_string()))
-                                    .send()?;
-                            }
-                            return Ok(());
+                            // Store message if no WS connection
+                            state.pending_partner_message = Some(message);
+                            state.save()?;
                         }
                     }
+                } else {
+                    // Store message if no WS channel
+                    state.pending_partner_message = Some(message);
+                    state.save()?;
                 }
             }
             if should_respond {

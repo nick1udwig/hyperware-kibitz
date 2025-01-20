@@ -17,8 +17,14 @@ function App() {
   const [nodeConnected, setNodeConnected] = useState(true);
   const [api, setApi] = useState<KinodeClientApi | undefined>();
 
-  const [partner, setPartnerInput] = useState("");
-  const [wsUrl, setWsUrl] = useState("");
+  const [partner, setPartnerInput] = useState(state.partner || "");
+  const [wsUrl, setWsUrl] = useState(state.wsUrl || "");
+
+  // Update input fields when state changes
+  useEffect(() => {
+    setPartnerInput(state.partner || "");
+    setWsUrl(state.wsUrl || "");
+  }, [state.partner, state.wsUrl]);
 
   // Setup WebSocket connections and state refresh
   useEffect(() => {
