@@ -26,6 +26,7 @@ wit_bindgen::generate!({
 
 const HTTP_API_PATH: &str = "/api";
 const WS_PATH: &str = "/";
+const DEFAULT_WS_URL: &str = "ws://localhost:10125";
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ProcessState {
@@ -62,10 +63,11 @@ impl ProcessState {
                 let Some(ws_channel) = state.ws_channel else {
                     return Ok(state);
                 };
-                let Some(url) = &state.ws_url else {
-                    error!("error restoring: have WS channel set but no WS url");
-                    return Ok(state);
-                };
+                let url = &state
+                    .ws_url
+                    .as_ref()
+                    .map(|url| url.clone())
+                    .unwrap_or_else(|| DEFAULT_WS_URL.to_string());
                 // First disconnect
                 if let Err(e) = close_ws_connection(ws_channel) {
                     info!("error restoring ({e}): couldn't close old WS; trying to proceed");
@@ -429,6 +431,16 @@ fn init(our: Address) {
         .expect("failed to bind WS");
 
     add_to_homepage("fwd-ws", None, Some("index.html"), None);
+
+    if let Err(_) = handle_request_message(
+        &our,
+        &our,
+        &serde_json::to_vec(&FwdWsRequest::ConnectToServer(DEFAULT_WS_URL.to_string())).unwrap(),
+        false,
+        &mut state,
+    ) {
+        info!("couldn't connect to default WS url: {DEFAULT_WS_URL}");
+    };
 
     info!("initialized with state: {:?}", state);
 

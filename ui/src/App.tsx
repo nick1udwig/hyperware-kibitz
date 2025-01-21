@@ -23,7 +23,7 @@ function App() {
   // Update input fields when state changes
   useEffect(() => {
     setPartnerInput(state.partner || "");
-    setWsUrl(state.wsUrl || "");
+    setWsUrl(state.wsUrl || "ws://localhost:10125");
   }, [state.partner, state.wsUrl]);
 
   // Setup WebSocket connections and state refresh
@@ -57,6 +57,9 @@ function App() {
     <div style={{ width: "100%" }}>
       <div style={{ position: "absolute", top: 4, left: 8 }}>
         ID: <strong>{window.our?.node}</strong>
+      </div>
+      <div style={{ position: "absolute", top: 20, left: 8 }}>
+        <a href={`${window.location.protocol}//${window.location.host}/kibitz:kibitz:nick.kino`}>Kibitz</a>
       </div>
 
       {!nodeConnected && (
