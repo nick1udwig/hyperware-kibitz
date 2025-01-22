@@ -8,7 +8,7 @@ use kinode_process_lib::{
     await_message, call_init, get_blob, get_state,
     homepage::add_to_homepage,
     http::{
-        client::{close_ws_connection, open_ws_connection, send_ws_client_push},
+        client::{close_ws_connection, open_ws_connection, send_ws_client_push, HttpClientRequest},
         server::{
             send_response, HttpBindingConfig, HttpServer, HttpServerAction, HttpServerRequest,
             StatusCode, WsBindingConfig, WsMessageType,
@@ -56,31 +56,11 @@ impl Default for ProcessState {
 impl ProcessState {
     fn restore() -> anyhow::Result<Self> {
         let restored = if let Some(state) = get_state() {
-            let state: Self = serde_json::from_slice(&state)?;
+            let mut state: Self = serde_json::from_slice(&state)?;
 
             // If we have a WebSocket server connection and a channel
-            if matches!(state.connection, ConnectionType::ToWsServer) {
-                let Some(ws_channel) = state.ws_channel else {
-                    return Ok(state);
-                };
-                let url = &state
-                    .ws_url
-                    .as_ref()
-                    .map(|url| url.clone())
-                    .unwrap_or_else(|| DEFAULT_WS_URL.to_string());
-                // First disconnect
-                if let Err(e) = close_ws_connection(ws_channel) {
-                    info!("error restoring ({e}): couldn't close old WS; trying to proceed");
-                };
+            state.try_reconnect_to_server()?;
 
-                // Then reconnect if we have a URL
-                let channel_id = rand::random();
-                if let Ok(_) = open_ws_connection(url.clone(), None, channel_id) {
-                    let mut state = state;
-                    state.ws_channel = Some(channel_id);
-                    return Ok(state);
-                }
-            }
             state
         } else {
             Self::default()
@@ -99,6 +79,34 @@ impl ProcessState {
             connection: self.connection.clone(),
             ws_url: self.ws_url.clone(),
         }
+    }
+
+    fn try_reconnect_to_server(&mut self) -> anyhow::Result<()> {
+        if !matches!(self.connection, ConnectionType::ToWsServer) {
+            return Ok(());
+        }
+        let url = &self
+            .ws_url
+            .as_ref()
+            .map(|url| url.clone())
+            .unwrap_or_else(|| DEFAULT_WS_URL.to_string());
+
+        if let Some(ws_channel) = self.ws_channel {
+            // First disconnect
+            if let Err(e) = close_ws_connection(ws_channel) {
+                info!("error restoring ({e}): couldn't close old WS; trying to proceed");
+            };
+        };
+
+        // Then reconnect if we have a URL
+        let channel_id = rand::random();
+        if let Ok(_) = open_ws_connection(url.clone(), None, channel_id) {
+            self.ws_channel = Some(channel_id);
+        } else {
+            self.ws_channel = None;
+        }
+        self.save()?;
+        Ok(())
     }
 }
 
@@ -379,13 +387,19 @@ fn handle_message(
     if source == &make_http_server_address(our) {
         handle_http_server_request(our, body, server, state)?;
     } else if source == &make_http_client_address(our) {
-        // Handle WebSocket client message
-        if let Some(blob) = get_blob() {
-            if let Some(ref partner) = state.partner {
-                Request::new()
-                    .target((partner, "fwd-ws", "kibitz", "nick.kino"))
-                    .body(FwdWsRequest::Forward(String::from_utf8(blob.bytes)?))
-                    .send()?;
+        let request = serde_json::from_slice::<HttpClientRequest>(body)?;
+        if let HttpClientRequest::WebSocketClose { .. } = request {
+            state.try_reconnect_to_server()?;
+        } else {
+            // Its a WebSocketPush:
+            //  Handle WebSocket client message
+            if let Some(blob) = get_blob() {
+                if let Some(ref partner) = state.partner {
+                    Request::new()
+                        .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                        .body(FwdWsRequest::Forward(String::from_utf8(blob.bytes)?))
+                        .send()?;
+                }
             }
         }
     } else {
