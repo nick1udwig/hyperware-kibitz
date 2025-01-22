@@ -3,6 +3,7 @@ import KinodeClientApi from "@kinode/client-api";
 import "./App.css";
 import { ConnectionType } from "./types/FwdWs";
 import useFwdWsStore from "./store/fwd_ws";
+import { ConnectionStatus } from "./components/ConnectionStatus";
 
 const BASE_URL = import.meta.env.BASE_URL;
 if (window.our) window.our.process = BASE_URL?.replace("/", "");
@@ -13,9 +14,8 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined;
 
 function App() {
-  const { state, updateState, setPartner, connectToServer, acceptClients, disconnect, refreshState } = useFwdWsStore();
+  const { state, setPartner, connectToServer, acceptClients, disconnect, refreshState } = useFwdWsStore();
   const [nodeConnected, setNodeConnected] = useState(true);
-  const [api, setApi] = useState<KinodeClientApi | undefined>();
 
   const [partner, setPartnerInput] = useState(state.partner || "");
   const [wsUrl, setWsUrl] = useState(state.wsUrl || "");
@@ -28,15 +28,22 @@ function App() {
 
   // Setup WebSocket connections and state refresh
   useEffect(() => {
+    // Initial state fetch
     refreshState().catch(console.error);
 
+    // Set up periodic polling
+    const pollInterval = setInterval(() => {
+      refreshState().catch(console.error);
+    }, 2000); // Poll every 2 seconds
+
     if (window.our?.node && window.our?.process) {
-      const api = new KinodeClientApi({
+      new KinodeClientApi({
         uri: WEBSOCKET_URL,
         nodeId: window.our.node,
         processId: window.our.process,
         onOpen: () => {
           console.log("Connected to Kinode");
+          refreshState().catch(console.error);
         },
         onMessage: (json) => {
           try {
@@ -47,16 +54,19 @@ function App() {
           }
         },
       });
-      setApi(api);
     } else {
       setNodeConnected(false);
     }
-  }, []);
+
+    // Cleanup polling on unmount
+    return () => clearInterval(pollInterval);
+  }, [refreshState]);
 
   return (
     <div style={{ width: "100%" }}>
-      <div style={{ position: "absolute", top: 4, left: 8 }}>
-        ID: <strong>{window.our?.node}</strong>
+      <div style={{ position: "absolute", top: 4, left: 8, display: "flex", alignItems: "center", gap: "16px" }}>
+        <div>ID: <strong>{window.our?.node}</strong></div>
+        <ConnectionStatus connectionType={state.connection} />
       </div>
       <div style={{ position: "absolute", top: 20, left: 8 }}>
         <a href={`${window.location.protocol}//${window.location.host}/kibitz:kibitz:nick.kino`}>Kibitz</a>
