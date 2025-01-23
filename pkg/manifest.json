@@ -26,11 +26,13 @@
         "request_capabilities": [
             "homepage:homepage:sys",
             "http-server:distro:sys",
+            "kv:distro:sys",
             "vfs:distro:sys"
         ],
         "grant_capabilities": [
             "homepage:homepage:sys",
             "http-server:distro:sys",
+            "kv:distro:sys",
             "vfs:distro:sys"
         ],
         "public": false
