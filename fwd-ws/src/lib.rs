@@ -8,7 +8,7 @@ use kinode_process_lib::{
     await_message, call_init, get_blob, get_state,
     homepage::add_to_homepage,
     http::{
-        client::{close_ws_connection, open_ws_connection, send_ws_client_push, HttpClientRequest},
+        client::{open_ws_connection, send_ws_client_push, HttpClientRequest},
         server::{
             send_response, HttpBindingConfig, HttpServer, HttpServerAction, HttpServerRequest,
             StatusCode, WsBindingConfig, WsMessageType,
@@ -85,27 +85,32 @@ impl ProcessState {
         if !matches!(self.connection, ConnectionType::ToWsServer) {
             return Ok(());
         }
+
+        // Only attempt reconnect if we don't have a valid channel
+        if self.ws_channel.is_some() {
+            return Ok(());
+        }
+
         let url = &self
             .ws_url
             .as_ref()
             .map(|url| url.clone())
             .unwrap_or_else(|| DEFAULT_WS_URL.to_string());
 
-        if let Some(ws_channel) = self.ws_channel {
-            // First disconnect
-            if let Err(e) = close_ws_connection(ws_channel) {
-                info!("error restoring ({e}): couldn't close old WS; trying to proceed");
-            };
-        };
-
-        // Then reconnect if we have a URL
+        // Create new connection
         let channel_id = rand::random();
-        if let Ok(_) = open_ws_connection(url.clone(), None, channel_id) {
-            self.ws_channel = Some(channel_id);
-        } else {
-            self.ws_channel = None;
+        match open_ws_connection(url.clone(), None, channel_id) {
+            Ok(_) => {
+                self.ws_channel = Some(channel_id);
+                self.save()?;
+                info!("Successfully reconnected to WebSocket server");
+            }
+            Err(e) => {
+                info!("Failed to reconnect to WebSocket server: {}", e);
+                self.ws_channel = None;
+                self.save()?;
+            }
         }
-        self.save()?;
         Ok(())
     }
 }
@@ -446,15 +451,19 @@ fn init(our: Address) {
 
     add_to_homepage("fwd-ws", None, Some("index.html"), None);
 
-    if let Err(_) = handle_request_message(
-        &our,
-        &our,
-        &serde_json::to_vec(&FwdWsRequest::ConnectToServer(DEFAULT_WS_URL.to_string())).unwrap(),
-        false,
-        &mut state,
-    ) {
-        info!("couldn't connect to default WS url: {DEFAULT_WS_URL}");
-    };
+    // Only try to connect to default URL if we're not already connected
+    if matches!(state.connection, ConnectionType::None) && state.ws_channel.is_none() {
+        if let Err(_) = handle_request_message(
+            &our,
+            &our,
+            &serde_json::to_vec(&FwdWsRequest::ConnectToServer(DEFAULT_WS_URL.to_string()))
+                .unwrap(),
+            false,
+            &mut state,
+        ) {
+            info!("couldn't connect to default WS url: {DEFAULT_WS_URL}");
+        }
+    }
 
     info!("initialized with state: {:?}", state);
 
