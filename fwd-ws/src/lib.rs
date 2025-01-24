@@ -14,7 +14,9 @@ use kinode_process_lib::{
             StatusCode, WsBindingConfig, WsMessageType,
         },
     },
-    println, set_state, Address, LazyLoadBlob, Message, Request, Response,
+    println, set_state,
+    timer::set_timer,
+    Address, LazyLoadBlob, Message, Request, Response,
 };
 
 wit_bindgen::generate!({
@@ -24,20 +26,29 @@ wit_bindgen::generate!({
     additional_derives: [serde::Deserialize, serde::Serialize, process_macros::SerdeJsonInto],
 });
 
+const INITIAL_RECONNECT_DELAY_MS: u64 = 5000;
+const MAX_RECONNECT_DELAY_MS: u64 = 30000;
+const RECONNECT_TIMER_ID: u32 = 123;
+
 const HTTP_API_PATH: &str = "/api";
 const WS_PATH: &str = "/";
 const DEFAULT_WS_URL: &str = "ws://localhost:10125";
+
+const RECONNECT_CONTEXT: &[u8] = b"reconnect";
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ProcessState {
     partner: Option<String>,
     connection: ConnectionType,
     ws_url: Option<String>,
+    #[serde(skip)]
     ws_channel: Option<u32>,
     #[serde(skip)]
     pending_message: Option<String>,
     #[serde(skip)]
     pending_partner_message: Option<String>,
+    #[serde(skip)]
+    current_reconnect_delay_ms: Option<u64>,
 }
 
 impl Default for ProcessState {
@@ -49,6 +60,7 @@ impl Default for ProcessState {
             ws_channel: None,
             pending_message: None,
             pending_partner_message: None,
+            current_reconnect_delay_ms: None,
         }
     }
 }
@@ -91,7 +103,7 @@ impl ProcessState {
             return Ok(());
         }
 
-        let url = &self
+        let url = self
             .ws_url
             .as_ref()
             .map(|url| url.clone())
@@ -101,16 +113,21 @@ impl ProcessState {
         let channel_id = rand::random();
         match open_ws_connection(url.clone(), None, channel_id) {
             Ok(_) => {
+                self.ws_url = Some(url);
                 self.ws_channel = Some(channel_id);
+                self.current_reconnect_delay_ms = None; // Reset delay on success
                 self.save()?;
                 info!("Successfully reconnected to WebSocket server");
+                return Ok(());
             }
             Err(e) => {
                 info!("Failed to reconnect to WebSocket server: {}", e);
                 self.ws_channel = None;
                 self.save()?;
+                schedule_reconnect(self)?;
             }
         }
+
         Ok(())
     }
 }
@@ -121,6 +138,25 @@ fn make_http_server_address(our: &Address) -> Address {
 
 fn make_http_client_address(our: &Address) -> Address {
     Address::from((our.node(), "http-client", "distro", "sys"))
+}
+fn make_timer_address(our: &Address) -> Address {
+    Address::from((our.node(), "timer", "distro", "sys"))
+}
+
+fn schedule_reconnect(state: &mut ProcessState) -> anyhow::Result<()> {
+    let delay = state
+        .current_reconnect_delay_ms
+        .unwrap_or(INITIAL_RECONNECT_DELAY_MS);
+
+    // Start a timer for reconnection
+    set_timer(delay, Some(RECONNECT_CONTEXT.to_vec()));
+
+    // Update the next delay (double it but cap at max)
+    state.current_reconnect_delay_ms = Some(std::cmp::min(delay * 2, MAX_RECONNECT_DELAY_MS));
+    state.save()?;
+
+    info!("Scheduled reconnection attempt in {}ms", delay);
+    Ok(())
 }
 
 fn handle_http_server_request(
@@ -148,7 +184,7 @@ fn handle_http_server_request(
             server.handle_websocket_open(path, channel_id);
 
             // Send any pending partner messages
-            if let Some(ref message) = state.pending_partner_message {
+            if let Some(message) = state.pending_partner_message.take() {
                 Request::new()
                     .target(&make_http_server_address(our))
                     .body(serde_json::to_vec(&HttpServerAction::WebSocketPush {
@@ -157,10 +193,9 @@ fn handle_http_server_request(
                     })?)
                     .blob(LazyLoadBlob {
                         mime: Some("text/plain".to_string()),
-                        bytes: message.clone().into_bytes(),
+                        bytes: message.into_bytes(),
                     })
                     .send()?;
-                state.pending_partner_message = None;
             }
             state.save()?;
         }
@@ -235,21 +270,18 @@ fn handle_request_message(
     should_respond: bool,
     state: &mut ProcessState,
 ) -> anyhow::Result<()> {
-    println!("fwdreq...");
     let request: FwdWsRequest = body.try_into()?;
-    println!("fwdreq: {:?}", request);
     match request {
         FwdWsRequest::SetPartner(partner) => {
             state.partner = partner;
             // If partner is being set, send any pending messages
             if state.partner.is_some() {
-                if let Some(ref msg) = state.pending_message {
+                if let Some(msg) = state.pending_message.take() {
                     if let Some(ref partner) = state.partner {
                         Request::new()
                             .target((partner, "fwd-ws", "kibitz", "nick.kino"))
-                            .body(FwdWsRequest::Forward(msg.clone()))
+                            .body(FwdWsRequest::Forward(msg))
                             .send()?;
-                        state.pending_message = None;
                     }
                 }
             }
@@ -325,45 +357,49 @@ fn handle_request_message(
                 return Ok(());
             }
             // Only handle if from partner
-            if state.partner.as_ref().map_or(false, |p| p == &source.node) {
-                if let Some(channel_id) = state.ws_channel {
-                    match state.connection {
-                        ConnectionType::ToWsServer => {
-                            // we're connected to a WS server: the ws-mcp
-                            //  send the message to the ws-mcp to be fulfilled
-                            send_ws_client_push(
-                                channel_id,
-                                WsMessageType::Text,
-                                LazyLoadBlob {
-                                    mime: Some("text/plain".to_string()),
-                                    bytes: message.clone().into_bytes(),
-                                },
-                            );
-                        }
-                        ConnectionType::ToWsClient => {
-                            // we're connected to kibitz:
-                            //  send the message to kibitz
-                            let http_server = make_http_server_address(our);
-                            Request::new()
-                                .target(&http_server)
-                                .body(serde_json::to_vec(&HttpServerAction::WebSocketPush {
-                                    channel_id,
-                                    message_type: WsMessageType::Text,
-                                })?)
-                                .blob(LazyLoadBlob {
-                                    mime: Some("text/plain".to_string()),
-                                    bytes: message.clone().into_bytes(),
-                                })
-                                .send()?;
-                        }
-                        ConnectionType::None => {
-                            // Store message if no WS connection
-                            state.pending_partner_message = Some(message);
-                            state.save()?;
-                        }
-                    }
-                } else {
-                    // Store message if no WS channel
+            if !state.partner.as_ref().map_or(false, |p| p == &source.node) {
+                return Ok(());
+            }
+            let Some(channel_id) = state.ws_channel else {
+                // Store message if no WS channel
+                state.pending_partner_message = Some(message);
+                state.save()?;
+                if should_respond {
+                    Response::new().body(FwdWsResponse::Ok).send()?;
+                }
+                return Ok(());
+            };
+            match state.connection {
+                ConnectionType::ToWsServer => {
+                    // we're connected to a WS server: the ws-mcp
+                    //  send the message to the ws-mcp to be fulfilled
+                    send_ws_client_push(
+                        channel_id,
+                        WsMessageType::Text,
+                        LazyLoadBlob {
+                            mime: Some("text/plain".to_string()),
+                            bytes: message.clone().into_bytes(),
+                        },
+                    );
+                }
+                ConnectionType::ToWsClient => {
+                    // we're connected to kibitz:
+                    //  send the message to kibitz
+                    let http_server = make_http_server_address(our);
+                    Request::new()
+                        .target(&http_server)
+                        .body(serde_json::to_vec(&HttpServerAction::WebSocketPush {
+                            channel_id,
+                            message_type: WsMessageType::Text,
+                        })?)
+                        .blob(LazyLoadBlob {
+                            mime: Some("text/plain".to_string()),
+                            bytes: message.clone().into_bytes(),
+                        })
+                        .send()?;
+                }
+                ConnectionType::None => {
+                    // Store message if no WS connection
                     state.pending_partner_message = Some(message);
                     state.save()?;
                 }
@@ -389,23 +425,43 @@ fn handle_message(
     let body = message.body();
     let source = message.source();
 
+    // Handle timer messages for reconnection
+    if source.process == "timer.os" && state.ws_channel.is_none() {
+        if let Ok(ref timer_message) = serde_json::from_slice::<u32>(body) {
+            if *timer_message == RECONNECT_TIMER_ID {
+                state.try_reconnect_to_server()?;
+                return Ok(());
+            }
+        }
+    }
+
     if source == &make_http_server_address(our) {
         handle_http_server_request(our, body, server, state)?;
     } else if source == &make_http_client_address(our) {
         let request = serde_json::from_slice::<HttpClientRequest>(body)?;
-        if let HttpClientRequest::WebSocketClose { .. } = request {
-            state.try_reconnect_to_server()?;
-        } else {
-            // Its a WebSocketPush:
-            //  Handle WebSocket client message
-            if let Some(blob) = get_blob() {
-                if let Some(ref partner) = state.partner {
-                    Request::new()
-                        .target((partner, "fwd-ws", "kibitz", "nick.kino"))
-                        .body(FwdWsRequest::Forward(String::from_utf8(blob.bytes)?))
-                        .send()?;
+        match request {
+            HttpClientRequest::WebSocketClose { .. } => {
+                if matches!(state.connection, ConnectionType::ToWsServer) {
+                    state.ws_channel = None;
+                    state.try_reconnect_to_server()?;
                 }
             }
+            _ => {
+                // Its a WebSocketPush:
+                //  Handle WebSocket client message
+                if let Some(blob) = get_blob() {
+                    if let Some(ref partner) = state.partner {
+                        Request::new()
+                            .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                            .body(FwdWsRequest::Forward(String::from_utf8(blob.bytes)?))
+                            .send()?;
+                    }
+                }
+            }
+        }
+    } else if source == &make_timer_address(our) {
+        if message.context().is_some_and(|c| c == RECONNECT_CONTEXT) {
+            state.try_reconnect_to_server()?;
         }
     } else {
         // Handle request from another node
@@ -420,6 +476,7 @@ fn handle_message(
         },
     );
 
+    info!("state post-message: {:?}", state);
     Ok(())
 }
 
@@ -451,17 +508,17 @@ fn init(our: Address) {
 
     add_to_homepage("fwd-ws", None, Some("index.html"), None);
 
-    // Only try to connect to default URL if we're not already connected
-    if matches!(state.connection, ConnectionType::None) && state.ws_channel.is_none() {
-        if let Err(_) = handle_request_message(
-            &our,
-            &our,
-            &serde_json::to_vec(&FwdWsRequest::ConnectToServer(DEFAULT_WS_URL.to_string()))
-                .unwrap(),
-            false,
-            &mut state,
-        ) {
-            info!("couldn't connect to default WS url: {DEFAULT_WS_URL}");
+    match open_ws_connection(DEFAULT_WS_URL.to_string(), None, rand::random()) {
+        Ok(_) => {
+            state.connection = ConnectionType::ToWsServer;
+            state.ws_url = Some(DEFAULT_WS_URL.to_string());
+            state.save().unwrap();
+        }
+        Err(e) => {
+            info!("couldn't connect to default WS url: {}, will retry...", e);
+            state.connection = ConnectionType::None;
+            state.ws_url = None;
+            state.try_reconnect_to_server().unwrap();
         }
     }
 
