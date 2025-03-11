@@ -1,4 +1,4 @@
-# [kibitz](https://github.com/nick1udwig/kibitz) on [kinode](https://github.com/hyperware-ai/hyperdrive)
+# [kibitz](https://github.com/nick1udwig/kibitz) on [hyperware](https://github.com/hyperware-ai/hyperdrive)
 
 Chat with LLMs and use tools, deployed on Hyperware
 
