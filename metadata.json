@@ -4,10 +4,11 @@
     "image": "https://raw.githubusercontent.com/nick1udwig/kibitz/137f2f6ddd61bc3cf3c01a7bed1d7eb2c0b6ac36/public/favicon.svg",
     "properties": {
         "package_name": "kibitz",
-        "current_version": "0.2.1",
+        "current_version": "0.2.2",
         "publisher": "nick.hypr",
         "mirrors": ["nick.hypr", "nick1udwig.os", "diligence.os", "yael-solutions.os"],
         "code_hashes": {
+            "0.2.2": "f824f923249913d77b212fd25aecf9f7dbe30d1ee0839bfdd1cd60915fa1dd12",
             "0.2.1": "058f499f23d8deefd808646e0589293556ba3b04a44cf4775655aa7a4f2db83c",
             "0.2.0": "b36c4b6a7e72eef9bcf98b46cf0f41c20de56b619877bff0525dcc5e4b320ab2"
         },
