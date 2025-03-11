@@ -1,9 +1,9 @@
-use kinode_process_lib::http::server::{
+use hyperware_process_lib::http::server::{
     HttpBindingConfig, HttpResponse, HttpServer, HttpServerRequest,
 };
-use kinode_process_lib::kv;
-use kinode_process_lib::logging::{info, init_logging, Level};
-use kinode_process_lib::{
+use hyperware_process_lib::kv;
+use hyperware_process_lib::logging::{info, init_logging, Level};
+use hyperware_process_lib::{
     await_message, call_init, homepage::add_to_homepage, last_blob, Address, Response,
 };
 use serde::{Deserialize, Serialize};
@@ -42,13 +42,13 @@ wit_bindgen::generate!({
 
 call_init!(init);
 fn init(our: Address) {
-    init_logging(&our, Level::DEBUG, Level::INFO, None, None).unwrap();
+    init_logging(Level::DEBUG, Level::INFO, None, None, None).unwrap();
     info!("begin");
 
     let mut server = HttpServer::new(5);
 
     server
-        .serve_ui(&our, "kibitz-ui", vec!["/"], HttpBindingConfig::default())
+        .serve_ui("kibitz-ui", vec!["/"], HttpBindingConfig::default())
         .expect("failed to serve UI");
     server
         .bind_http_path(HTTP_API_PATH, HttpBindingConfig::default())
@@ -230,7 +230,7 @@ fn init(our: Address) {
                     _ => {
                         // Serve UI requests through the HttpServer
                         server
-                            .serve_ui(&our, "kibitz-ui", vec!["/"], HttpBindingConfig::default())
+                            .serve_ui("kibitz-ui", vec!["/"], HttpBindingConfig::default())
                             .unwrap();
                     }
                 }

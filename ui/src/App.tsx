@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import KinodeClientApi from "@kinode/client-api";
+import HyperwareClientApi from "@hyperware-ai/client-api";
 import "./App.css";
 import { ConnectionType } from "./types/FwdWs";
 import useFwdWsStore from "./store/fwd_ws";
@@ -37,7 +37,7 @@ function App() {
     }, 2000); // Poll every 2 seconds
 
     if (window.our?.node && window.our?.process) {
-      new KinodeClientApi({
+      new HyperwareClientApi({
         uri: WEBSOCKET_URL,
         nodeId: window.our.node,
         processId: window.our.process,

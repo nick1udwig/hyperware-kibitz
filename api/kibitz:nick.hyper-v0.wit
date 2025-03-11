@@ -38,7 +38,7 @@ interface fwd-ws {
     }
 }
 
-world fwd-ws-template-dot-os-v0 {
+world kibitz-nick-dot-hypr-v0 {
     import fwd-ws;
     include process-v1;
 }

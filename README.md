@@ -1,10 +1,10 @@
-# [kibitz](https://github.com/nick1udwig/kibitz) on [kinode](https://github.com/kinode-dao/kinode)
+# [kibitz](https://github.com/nick1udwig/kibitz) on [kinode](https://github.com/hyperware-ai/hyperdrive)
 
-Chat with LLMs and use tools, deployed on Kinode
+Chat with LLMs and use tools, deployed on Hyperware
 
 ## Installation
 
-Go to the Kinode App Store and download & install kibitz.
+Go to the Hyperware App Store and download & install kibitz.
 
 ## Configuration
 

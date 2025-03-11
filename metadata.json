@@ -1,15 +1,14 @@
 {
     "name": "kibitz",
-    "description": "Chat with LLMs and use tools",
+    "description": "The coding agent for professionals",
     "image": "https://raw.githubusercontent.com/nick1udwig/kibitz/137f2f6ddd61bc3cf3c01a7bed1d7eb2c0b6ac36/public/favicon.svg",
     "properties": {
         "package_name": "kibitz",
-        "current_version": "0.1.4",
-        "publisher": "nick.kino",
-        "mirrors": ["nick.kino", "nick1udwig.os", "diligence.os", "yael-solutions.os"],
+        "current_version": "0.2.0",
+        "publisher": "nick.hypr",
+        "mirrors": ["nick.hypr", "nick1udwig.os", "diligence.os", "yael-solutions.os"],
         "code_hashes": {
-            "0.1.4": "5d77bc88df4e61e93cc5b39152518c5cc11563665e99d851b4e0dc0730886c8e",
-            "0.1.3": "3f24976c2a8212bf2992c6975356a471c4e9a0a59a842b0d7ffc2c5981ba5d4c"
+            "0.2.0": "b36c4b6a7e72eef9bcf98b46cf0f41c20de56b619877bff0525dcc5e4b320ab2"
         },
         "wit_version": 1,
         "dependencies": []

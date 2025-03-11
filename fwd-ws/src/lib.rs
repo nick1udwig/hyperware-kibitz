@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::kinode::process::fwd_ws::{
+use crate::hyperware::process::fwd_ws::{
     ConnectionType, Request as FwdWsRequest, Response as FwdWsResponse, State,
 };
-use kinode_process_lib::logging::{error, info, init_logging, Level};
-use kinode_process_lib::{
+use hyperware_process_lib::logging::{error, info, init_logging, Level};
+use hyperware_process_lib::{
     await_message, call_init, get_blob, get_state,
     homepage::add_to_homepage,
     http::{
@@ -21,7 +21,7 @@ use kinode_process_lib::{
 
 wit_bindgen::generate!({
     path: "target/wit",
-    world: "fwd-ws-template-dot-os-v0",
+    world: "kibitz-nick-dot-hypr-v0",
     generate_unused_types: true,
     additional_derives: [serde::Deserialize, serde::Serialize, process_macros::SerdeJsonInto],
 });
@@ -482,7 +482,7 @@ fn handle_message(
 
 call_init!(init);
 fn init(our: Address) {
-    init_logging(&our, Level::DEBUG, Level::INFO, None, None).unwrap();
+    init_logging(Level::DEBUG, Level::INFO, None, None, None).unwrap();
     info!("begin");
 
     let mut server = HttpServer::new(5);
@@ -490,7 +490,7 @@ fn init(our: Address) {
 
     // Serve static UI files at root
     server
-        .serve_ui(&our, "ui", vec!["/"], HttpBindingConfig::default())
+        .serve_ui("ui", vec!["/"], HttpBindingConfig::default())
         .expect("failed to serve UI");
 
     // State API endpoint
