@@ -10,7 +10,7 @@ Go to the Hyperware App Store and download & install kibitz.
 
 ### Run WS-MCP
 
-For a [locally hosted node](https://book.kinode.org/getting_started/install.html), run a [ws-mcp server](https://github.com/nick1udwig/ws-mcp) alongside to enable tool use:
+For a [locally hosted node](https://book.hyperware.ai/getting_started/install.html), run a [ws-mcp server](https://github.com/nick1udwig/ws-mcp) alongside to enable tool use:
 ```bash
 # Install uv python manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -27,7 +27,7 @@ You can use kibitz to run tools on your laptop/desktop computer from your mobile
 This allows for remote code editing, and more.
 
 1. [Set up a locally hosted node and a ws-mcp server](#run-ws-mcp).
-2. [Get a hosted node](https://valet.kinode.org/), or else run a node on a VPS or somewhere you can access from mobile.
+2. [Get a hosted node](https://valet.hyperware.ai/), or else run a node on a VPS or somewhere you can access from mobile.
 3. Run your desktop ws-mcp server.
 4. Install kibitz on both of the nodes.
 5. On each node, configure fwd-ws, an app that comes bundled with kibitz.

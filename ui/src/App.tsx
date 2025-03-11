@@ -69,7 +69,7 @@ function App() {
         <ConnectionStatus connectionType={state.connection} />
       </div>
       <div style={{ position: "absolute", top: 20, left: 8 }}>
-        <a href={`${window.location.protocol}//${window.location.host}/kibitz:kibitz:nick.kino`}>Kibitz</a>
+        <a href={`${window.location.protocol}//${window.location.host}/kibitz:kibitz:nick.hypr`}>Kibitz</a>
       </div>
 
       {!nodeConnected && (

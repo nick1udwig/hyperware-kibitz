@@ -221,7 +221,7 @@ fn handle_http_server_request(
                 let msg = String::from_utf8(blob.bytes)?;
                 if let Some(ref partner) = state.partner {
                     Request::new()
-                        .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                        .target((partner, "fwd-ws", "kibitz", "nick.hypr"))
                         .body(FwdWsRequest::Forward(msg))
                         .send()?;
                 } else {
@@ -279,7 +279,7 @@ fn handle_request_message(
                 if let Some(msg) = state.pending_message.take() {
                     if let Some(ref partner) = state.partner {
                         Request::new()
-                            .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                            .target((partner, "fwd-ws", "kibitz", "nick.hypr"))
                             .body(FwdWsRequest::Forward(msg))
                             .send()?;
                     }
@@ -452,7 +452,7 @@ fn handle_message(
                 if let Some(blob) = get_blob() {
                     if let Some(ref partner) = state.partner {
                         Request::new()
-                            .target((partner, "fwd-ws", "kibitz", "nick.kino"))
+                            .target((partner, "fwd-ws", "kibitz", "nick.hypr"))
                             .body(FwdWsRequest::Forward(String::from_utf8(blob.bytes)?))
                             .send()?;
                     }
