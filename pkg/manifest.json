@@ -1,27 +1,6 @@
 [
     {
-        "process_name": "fwd-ws",
-        "process_wasm_path": "/fwd-ws.wasm",
-        "on_exit": "Restart",
-        "request_networking": true,
-        "request_capabilities": [
-            "homepage:homepage:sys",
-            "http-client:distro:sys",
-            "http-server:distro:sys",
-            "timer:distro:sys",
-            "vfs:distro:sys"
-        ],
-        "grant_capabilities": [
-            "homepage:homepage:sys",
-            "http-client:distro:sys",
-            "http-server:distro:sys",
-            "timer:distro:sys",
-            "vfs:distro:sys"
-        ],
-        "public": false
-    },
-    {
-        "process_name": "kibitz",
+        "process_name": "gridchat",
         "process_wasm_path": "/kibitz.wasm",
         "on_exit": "Restart",
         "request_networking": false,
