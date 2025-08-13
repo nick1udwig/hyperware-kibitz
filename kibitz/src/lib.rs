@@ -54,24 +54,11 @@ fn init(our: Address) {
         .bind_http_path(HTTP_API_PATH, HttpBindingConfig::default())
         .expect("failed to bind API");
 
-    add_to_homepage("Kibitz", Some(ICON), Some(""), None);
+    add_to_homepage("Gridchat", Some(ICON), Some(""), None);
 
     // Setup KV store
     let kv = kv::open(our.package_id(), DB_NAME, None).expect("failed to open kv db");
     let key = b"api_keys".to_vec();
-
-    //Request::new()
-    //    .target(("our", "kv", "distro", "sys"))
-    //    .body(
-    //        serde_json::to_vec(&KvRequest {
-    //            package_id: our.package_id(),
-    //            db: "kibitz_api_keys".to_string(),
-    //            action: KvAction::Open,
-    //        })
-    //        .unwrap(),
-    //    )
-    //    .send()
-    //    .unwrap();
 
     loop {
         match await_message() {
@@ -100,37 +87,6 @@ fn init(our: Address) {
                 ) {
                     ("GET", "/api/keys") => {
                         let api_keys: ApiKeys = kv.get(&key).unwrap_or_default();
-                        // Get API keys from KV store
-                        //let api_keys = match Request::new()
-                        //    .target(("our", "kv", "distro", "sys"))
-                        //    .body(
-                        //        serde_json::to_vec(&KvRequest {
-                        //            package_id: our.package_id(),
-                        //            db: "kibitz_api_keys".to_string(),
-                        //            action: KvAction::Get(b"api_keys".to_vec()),
-                        //        })
-                        //        .unwrap(),
-                        //    )
-                        //    .send_and_await_response(5)
-                        //    .unwrap()
-                        //{
-                        //    Ok(resp) => {
-                        //        if let Ok(KvResponse::Get(value)) =
-                        //            serde_json::from_slice(resp.body())
-                        //        {
-                        //            serde_json::from_slice(&value).unwrap_or(ApiKeys {
-                        //                keys: HashMap::new(),
-                        //            })
-                        //        } else {
-                        //            ApiKeys {
-                        //                keys: HashMap::new(),
-                        //            }
-                        //        }
-                        //    }
-                        //    Err(_) => ApiKeys {
-                        //        keys: HashMap::new(),
-                        //    },
-                        //};
 
                         info!("GET /api/keys: {api_keys:?}");
                         Response::new()
@@ -183,49 +139,6 @@ fn init(our: Address) {
                                     .unwrap();
                             }
                         }
-                        //// Store API keys in KV store
-                        //let result = Request::new()
-                        //    .target(("our", "kv", "distro", "sys"))
-                        //    .body(
-                        //        serde_json::to_vec(&KvRequest {
-                        //            package_id: our.package_id(),
-                        //            db: "kibitz_api_keys".to_string(),
-                        //            action: KvAction::Set {
-                        //                key: b"api_keys".to_vec(),
-                        //                tx_id: None,
-                        //            },
-                        //        })
-                        //        .unwrap(),
-                        //    )
-                        //    .blob(LazyLoadBlob {
-                        //        mime: None,
-                        //        bytes: serde_json::to_vec(&new_keys).unwrap(),
-                        //    })
-                        //    .send_and_await_response(5)
-                        //    .unwrap();
-
-                        //match result {
-                        //    Ok(_) => {
-                        //        Response::new()
-                        //            .body(
-                        //                serde_json::to_vec(&HttpResponse::new(HTTP_OK))
-                        //                    .unwrap(),
-                        //            )
-                        //            .send()
-                        //            .unwrap();
-                        //    }
-                        //    Err(_) => {
-                        //        Response::new()
-                        //            .body(
-                        //                serde_json::to_vec(&HttpResponse::new(
-                        //                    HTTP_SERVER_ERROR,
-                        //                ))
-                        //                .unwrap(),
-                        //            )
-                        //            .send()
-                        //            .unwrap();
-                        //    }
-                        //}
                     }
                     _ => {
                         // Serve UI requests through the HttpServer
